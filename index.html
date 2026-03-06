@@ -1,0 +1,1130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Anki Scribe - Vocabulary Trainer</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #f5f6fa;
+      --surface: #ffffff;
+      --text: #1a1a2e;
+      --text-muted: #6b7280;
+      --primary: #6c7ff8;
+      --primary-hover: #5a6de6;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --success-bg: #dcfce7;
+      --danger-bg: #fee2e2;
+      --border: #e5e7eb;
+      --radius: 16px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+      --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* ---- Header / Nav ---- */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: -0.3px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: var(--bg);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 18px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .btn-icon:hover, .btn-icon:active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    /* ---- Main Layout ---- */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 16px;
+      gap: 12px;
+    }
+
+    /* ---- Prompt Card ---- */
+    .prompt-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 24px;
+      flex-shrink: 0;
+      transition: background 0.4s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .prompt-card.result-correct {
+      background: var(--success-bg);
+    }
+
+    .prompt-card.result-wrong {
+      background: var(--danger-bg);
+    }
+
+    .prompt-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .prompt-word {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      line-height: 1.2;
+    }
+
+    .prompt-context {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .result-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .result-row .label {
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .result-row .ocr-text {
+      font-weight: 600;
+    }
+
+    .result-row .correct-answer {
+      font-weight: 600;
+      color: var(--success);
+    }
+
+    .result-row .wrong-answer {
+      color: var(--danger);
+    }
+
+    /* ---- Drawing Area ---- */
+    .drawing-area {
+      flex: 1;
+      display: flex;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .canvas-wrapper {
+      flex: 1;
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+      min-height: 0;
+    }
+
+    .canvas-wrapper canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .canvas-placeholder {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      color: var(--border);
+      font-size: 20px;
+      font-weight: 500;
+      text-align: center;
+      line-height: 1.4;
+      opacity: 1;
+      transition: opacity 0.3s;
+    }
+
+    .canvas-placeholder.hidden {
+      opacity: 0;
+    }
+
+    .check-btn-wrapper {
+      flex-shrink: 0;
+      display: flex;
+      align-items: stretch;
+    }
+
+    .btn-check {
+      width: 72px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow);
+      transition: background 0.15s, transform 0.1s;
+      letter-spacing: 0.5px;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+    }
+
+    .btn-check:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-check:active {
+      transform: scale(0.97);
+    }
+
+    .btn-check:disabled {
+      background: var(--border);
+      cursor: not-allowed;
+    }
+
+    .btn-check .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ---- Bottom Actions ---- */
+    .bottom-actions {
+      display: flex;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      flex: 1;
+      height: 56px;
+      border: none;
+      border-radius: var(--radius);
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: var(--shadow);
+    }
+
+    .btn-secondary:hover {
+      background: #f0f0f5;
+    }
+
+    .btn-next {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .btn-next:hover {
+      background: var(--primary-hover);
+    }
+
+    /* ---- Stats Modal ---- */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      width: 100%;
+      max-width: 500px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+    }
+
+    .modal-overlay.open .modal {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .modal-header h2 {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px 32px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .stats-summary {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-box {
+      background: var(--bg);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+    }
+
+    .stat-box .number {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-box .label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .stat-box.correct .number { color: var(--success); }
+    .stat-box.wrong .number { color: var(--danger); }
+
+    .vocab-stats-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .vocab-stat-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: var(--bg);
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .vocab-stat-item .word {
+      font-weight: 600;
+    }
+
+    .vocab-stat-item .translation {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .vocab-stat-item .ratio {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .ratio .correct-count { color: var(--success); }
+    .ratio .wrong-count { color: var(--danger); }
+
+    .btn-clear-stats {
+      margin-top: 16px;
+      width: 100%;
+      height: 48px;
+      border: 2px solid var(--danger);
+      border-radius: 12px;
+      background: transparent;
+      color: var(--danger);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-clear-stats:hover {
+      background: var(--danger-bg);
+    }
+
+    /* ---- Loading overlay ---- */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      transition: opacity 0.4s;
+    }
+
+    .loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-overlay h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .loading-overlay p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .loading-bar {
+      width: 200px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .loading-bar-inner {
+      height: 100%;
+      width: 0%;
+      background: var(--primary);
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    /* ---- Responsive ---- */
+    @media (min-width: 600px) {
+      .main {
+        max-width: 560px;
+        margin: 0 auto;
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading screen while Tesseract initializes -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <h2>Anki Scribe</h2>
+    <p id="loadingStatus">Initializing OCR engine...</p>
+    <div class="loading-bar">
+      <div class="loading-bar-inner" id="loadingBar"></div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <h1>Anki Scribe</h1>
+    <div class="header-actions">
+      <button class="btn-icon" id="btnStats" title="Stats">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Prompt -->
+    <div class="prompt-card" id="promptCard">
+      <div class="prompt-label" id="promptLabel">Translate to English</div>
+      <div class="prompt-word" id="promptWord">Stra&szlig;e</div>
+      <div class="prompt-context" id="promptContext"></div>
+      <div class="result-row" id="resultRow" style="display:none;">
+        <span class="label">Your answer:</span>
+        <span class="ocr-text" id="ocrResult"></span>
+      </div>
+      <div class="result-row" id="correctRow" style="display:none;">
+        <span class="label">Correct:</span>
+        <span class="correct-answer" id="correctAnswer"></span>
+      </div>
+    </div>
+
+    <!-- Drawing area + check button -->
+    <div class="drawing-area">
+      <div class="canvas-wrapper" id="canvasWrapper">
+        <canvas id="drawCanvas"></canvas>
+        <div class="canvas-placeholder" id="canvasPlaceholder">Write your<br>answer here</div>
+      </div>
+      <div class="check-btn-wrapper">
+        <button class="btn-check" id="btnCheck">CHECK</button>
+      </div>
+    </div>
+
+    <!-- Bottom actions -->
+    <div class="bottom-actions" id="bottomActions">
+      <button class="btn btn-secondary" id="btnShowAnswer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        Show Answer
+      </button>
+      <button class="btn btn-secondary" id="btnClear">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M5 6l1 14h12l1-14"/></svg>
+        Clear
+      </button>
+    </div>
+
+    <!-- Next button (shown after checking) -->
+    <div class="bottom-actions" id="nextActions" style="display:none;">
+      <button class="btn btn-next" id="btnNext">
+        Next Word
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </main>
+
+  <!-- Stats Modal -->
+  <div class="modal-overlay" id="statsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Statistics</h2>
+        <button class="btn-icon" id="btnCloseStats">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" id="statsBody">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // VOCABULARY DATA (mockup - German to English)
+    // =========================================================================
+    const VOCABULARY = [
+      { id: "v1",  prompt: "Stra\u00dfe",       answer: "street",      context: "Die Stra\u00dfe ist lang." },
+      { id: "v2",  prompt: "Haus",            answer: "house",       context: "Das Haus ist gro\u00df." },
+      { id: "v3",  prompt: "Wasser",          answer: "water",       context: "Ich trinke Wasser." },
+      { id: "v4",  prompt: "Buch",            answer: "book",        context: "Ich lese ein Buch." },
+      { id: "v5",  prompt: "Schule",          answer: "school",      context: "Die Kinder gehen zur Schule." },
+      { id: "v6",  prompt: "Freund",          answer: "friend",      context: "Er ist mein Freund." },
+      { id: "v7",  prompt: "Hund",            answer: "dog",         context: "Der Hund ist braun." },
+      { id: "v8",  prompt: "Katze",           answer: "cat",         context: "Die Katze schl\u00e4ft." },
+      { id: "v9",  prompt: "Baum",            answer: "tree",        context: "Der Baum ist hoch." },
+      { id: "v10", prompt: "Blume",           answer: "flower",      context: "Die Blume ist sch\u00f6n." },
+      { id: "v11", prompt: "Stadt",           answer: "city",        context: "Berlin ist eine Stadt." },
+      { id: "v12", prompt: "Himmel",          answer: "sky",         context: "Der Himmel ist blau." },
+      { id: "v13", prompt: "Essen",           answer: "food",        context: "Das Essen schmeckt gut." },
+      { id: "v14", prompt: "Arbeit",          answer: "work",        context: "Ich gehe zur Arbeit." },
+      { id: "v15", prompt: "Zeit",            answer: "time",        context: "Die Zeit vergeht schnell." },
+      { id: "v16", prompt: "Liebe",           answer: "love",        context: "Liebe ist wichtig." },
+      { id: "v17", prompt: "Nacht",           answer: "night",       context: "Die Nacht ist dunkel." },
+      { id: "v18", prompt: "Morgen",          answer: "morning",     context: "Guten Morgen!" },
+      { id: "v19", prompt: "K\u00fcche",        answer: "kitchen",     context: "Ich koche in der K\u00fcche." },
+      { id: "v20", prompt: "Fenster",         answer: "window",      context: "Das Fenster ist offen." },
+    ];
+
+    // =========================================================================
+    // STATS STORAGE
+    // =========================================================================
+    const STORAGE_KEY = "anki_scribe_stats";
+
+    function loadStats() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function saveStats(stats) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+    }
+
+    function recordAttempt(vocabId, isCorrect) {
+      const stats = loadStats();
+      if (!stats[vocabId]) {
+        stats[vocabId] = { attempts: 0, correct: 0, wrong: 0, history: [] };
+      }
+      stats[vocabId].attempts++;
+      if (isCorrect) {
+        stats[vocabId].correct++;
+      } else {
+        stats[vocabId].wrong++;
+      }
+      stats[vocabId].history.push({
+        timestamp: Date.now(),
+        correct: isCorrect
+      });
+      saveStats(stats);
+    }
+
+    function clearStats() {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+
+    // =========================================================================
+    // CANVAS DRAWING
+    // =========================================================================
+    const canvas = document.getElementById("drawCanvas");
+    const ctx = canvas.getContext("2d");
+    const canvasWrapper = document.getElementById("canvasWrapper");
+    const placeholder = document.getElementById("canvasPlaceholder");
+    let isDrawing = false;
+    let hasDrawn = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    function resizeCanvas() {
+      const rect = canvasWrapper.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Restore drawing settings
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#1a1a2e";
+      // Fill white background
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    }
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      let clientX, clientY;
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+      }
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    function startDraw(e) {
+      if (isShowingResult) return;
+      e.preventDefault();
+      isDrawing = true;
+      const pos = getPos(e);
+      lastX = pos.x;
+      lastY = pos.y;
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+      // Draw a dot for taps
+      ctx.lineTo(pos.x + 0.1, pos.y + 0.1);
+      ctx.stroke();
+      if (!hasDrawn) {
+        hasDrawn = true;
+        placeholder.classList.add("hidden");
+      }
+    }
+
+    function draw(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      lastX = pos.x;
+      lastY = pos.y;
+    }
+
+    function endDraw(e) {
+      if (e) e.preventDefault();
+      isDrawing = false;
+    }
+
+    // Prevent default touch behavior on canvas to avoid scrolling
+    canvas.addEventListener("mousedown", startDraw);
+    canvas.addEventListener("mousemove", draw);
+    canvas.addEventListener("mouseup", endDraw);
+    canvas.addEventListener("mouseleave", endDraw);
+    canvas.addEventListener("touchstart", startDraw, { passive: false });
+    canvas.addEventListener("touchmove", draw, { passive: false });
+    canvas.addEventListener("touchend", endDraw, { passive: false });
+    canvas.addEventListener("touchcancel", endDraw, { passive: false });
+
+    function clearCanvas() {
+      const rect = canvasWrapper.getBoundingClientRect();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      // Restore drawing settings after clear
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#1a1a2e";
+      hasDrawn = false;
+      placeholder.classList.remove("hidden");
+    }
+
+    window.addEventListener("resize", () => {
+      // Debounce resize
+      clearTimeout(window._resizeTimer);
+      window._resizeTimer = setTimeout(() => {
+        resizeCanvas();
+        hasDrawn = false;
+        placeholder.classList.remove("hidden");
+      }, 150);
+    });
+
+    // =========================================================================
+    // TESSERACT OCR
+    // =========================================================================
+    let worker = null;
+
+    async function initOCR() {
+      const loadingStatus = document.getElementById("loadingStatus");
+      const loadingBar = document.getElementById("loadingBar");
+
+      loadingStatus.textContent = "Loading OCR engine...";
+      loadingBar.style.width = "20%";
+
+      worker = await Tesseract.createWorker("eng", 1, {
+        logger: (m) => {
+          if (m.status === "recognizing text") {
+            loadingBar.style.width = (20 + m.progress * 60) + "%";
+          } else if (m.status === "loading language traineddata") {
+            loadingStatus.textContent = "Loading language data...";
+            loadingBar.style.width = (10 + m.progress * 10) + "%";
+          }
+        }
+      });
+
+      // Configure for single word recognition
+      await worker.setParameters({
+        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_WORD,
+      });
+
+      loadingBar.style.width = "100%";
+      loadingStatus.textContent = "Ready!";
+
+      setTimeout(() => {
+        document.getElementById("loadingOverlay").classList.add("hidden");
+      }, 400);
+    }
+
+    function getCroppedCanvas() {
+      // Create a temp canvas to crop only the drawn region with padding
+      const rect = canvasWrapper.getBoundingClientRect();
+      const w = Math.round(rect.width);
+      const h = Math.round(rect.height);
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      // Find bounding box of non-white pixels
+      let minX = w, minY = h, maxX = 0, maxY = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          // Check if pixel is significantly non-white
+          if (data[i] < 200 || data[i + 1] < 200 || data[i + 2] < 200) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+      }
+
+      if (minX >= maxX || minY >= maxY) return null; // Nothing drawn
+
+      // Add generous padding
+      const pad = 30;
+      minX = Math.max(0, minX - pad);
+      minY = Math.max(0, minY - pad);
+      maxX = Math.min(w - 1, maxX + pad);
+      maxY = Math.min(h - 1, maxY + pad);
+
+      const cropW = maxX - minX + 1;
+      const cropH = maxY - minY + 1;
+
+      const cropCanvas = document.createElement("canvas");
+      cropCanvas.width = cropW;
+      cropCanvas.height = cropH;
+      const cropCtx = cropCanvas.getContext("2d");
+      // Fill white background
+      cropCtx.fillStyle = "#ffffff";
+      cropCtx.fillRect(0, 0, cropW, cropH);
+      // Draw the cropped region
+      cropCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+
+      return cropCanvas;
+    }
+
+    async function recognizeText() {
+      if (!worker) return "";
+      // Crop to just the drawn region for better recognition
+      const cropped = getCroppedCanvas();
+      if (!cropped) return "";
+      const dataUrl = cropped.toDataURL("image/png");
+      const result = await worker.recognize(dataUrl);
+      // Clean up recognized text
+      return result.data.text.trim().toLowerCase().replace(/[^a-z]/g, "");
+    }
+
+    // Levenshtein distance for fuzzy matching
+    function levenshtein(a, b) {
+      const m = a.length, n = b.length;
+      const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + (a[i - 1] !== b[j - 1] ? 1 : 0)
+          );
+        }
+      }
+      return dp[m][n];
+    }
+
+    // =========================================================================
+    // VOCABULARY TRAINER LOGIC
+    // =========================================================================
+    let currentVocab = null;
+    let isChecking = false;
+    let isShowingResult = false;
+
+    const promptCard = document.getElementById("promptCard");
+    const promptLabel = document.getElementById("promptLabel");
+    const promptWord = document.getElementById("promptWord");
+    const promptContext = document.getElementById("promptContext");
+    const resultRow = document.getElementById("resultRow");
+    const correctRow = document.getElementById("correctRow");
+    const ocrResult = document.getElementById("ocrResult");
+    const correctAnswer = document.getElementById("correctAnswer");
+    const btnCheck = document.getElementById("btnCheck");
+    const btnShowAnswer = document.getElementById("btnShowAnswer");
+    const btnClear = document.getElementById("btnClear");
+    const btnNext = document.getElementById("btnNext");
+    const bottomActions = document.getElementById("bottomActions");
+    const nextActions = document.getElementById("nextActions");
+
+    function pickNextVocab() {
+      const stats = loadStats();
+      // Weight selection: less practiced and more wrong answers = higher priority
+      const weighted = VOCABULARY.map(v => {
+        const s = stats[v.id];
+        if (!s) return { vocab: v, weight: 10 }; // Never seen = high priority
+        const wrongRate = s.attempts > 0 ? s.wrong / s.attempts : 0;
+        const recency = s.history.length > 0
+          ? (Date.now() - s.history[s.history.length - 1].timestamp) / (1000 * 60 * 60)
+          : 100; // hours since last attempt
+        // Higher weight = more likely to be picked
+        const weight = Math.max(1, (wrongRate * 5) + Math.min(recency, 10) - (s.correct * 0.5));
+        return { vocab: v, weight };
+      });
+
+      // Don't repeat the same word
+      const candidates = weighted.filter(w => !currentVocab || w.vocab.id !== currentVocab.id);
+      // Weighted random selection
+      const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
+      let rand = Math.random() * totalWeight;
+      for (const c of candidates) {
+        rand -= c.weight;
+        if (rand <= 0) return c.vocab;
+      }
+      return candidates[candidates.length - 1].vocab;
+    }
+
+    function showVocab(vocab) {
+      currentVocab = vocab;
+      isShowingResult = false;
+
+      promptCard.className = "prompt-card";
+      promptLabel.textContent = "Translate to English";
+      promptWord.textContent = vocab.prompt;
+      promptContext.textContent = vocab.context;
+      resultRow.style.display = "none";
+      correctRow.style.display = "none";
+
+      bottomActions.style.display = "flex";
+      nextActions.style.display = "none";
+      btnCheck.disabled = false;
+      btnCheck.innerHTML = "CHECK";
+
+      clearCanvas();
+    }
+
+    async function checkAnswer() {
+      if (isChecking || isShowingResult || !hasDrawn) return;
+      isChecking = true;
+      btnCheck.disabled = true;
+      btnCheck.innerHTML = '<div class="spinner"></div>';
+
+      try {
+        const recognized = await recognizeText();
+        const expected = currentVocab.answer.toLowerCase().replace(/[^a-z]/g, "");
+        // Exact match or fuzzy match (allow 1 char difference for words >= 4 chars)
+        const dist = levenshtein(recognized, expected);
+        const threshold = expected.length >= 4 ? 1 : 0;
+        const isCorrect = recognized.length > 0 && dist <= threshold;
+
+        // Show result
+        ocrResult.textContent = recognized || "(nothing detected)";
+        ocrResult.className = "ocr-text " + (isCorrect ? "" : "wrong-answer");
+        resultRow.style.display = "flex";
+
+        correctAnswer.textContent = currentVocab.answer;
+        correctRow.style.display = "flex";
+
+        promptCard.className = "prompt-card " + (isCorrect ? "result-correct" : "result-wrong");
+
+        // Record stats
+        recordAttempt(currentVocab.id, isCorrect);
+
+        // Switch to next mode
+        bottomActions.style.display = "none";
+        nextActions.style.display = "flex";
+        isShowingResult = true;
+      } catch (err) {
+        console.error("OCR error:", err);
+        btnCheck.innerHTML = "CHECK";
+        btnCheck.disabled = false;
+      }
+
+      isChecking = false;
+    }
+
+    function showAnswer() {
+      if (isShowingResult) return;
+      correctAnswer.textContent = currentVocab.answer;
+      correctRow.style.display = "flex";
+      resultRow.style.display = "none";
+      promptCard.className = "prompt-card result-wrong";
+
+      // Record as wrong since they peeked
+      recordAttempt(currentVocab.id, false);
+
+      bottomActions.style.display = "none";
+      nextActions.style.display = "flex";
+      isShowingResult = true;
+    }
+
+    function nextWord() {
+      const vocab = pickNextVocab();
+      showVocab(vocab);
+    }
+
+    // Event listeners
+    btnCheck.addEventListener("click", checkAnswer);
+    btnClear.addEventListener("click", () => {
+      if (!isShowingResult) clearCanvas();
+    });
+    btnShowAnswer.addEventListener("click", showAnswer);
+    btnNext.addEventListener("click", nextWord);
+
+    // =========================================================================
+    // STATS MODAL
+    // =========================================================================
+    const statsModal = document.getElementById("statsModal");
+    const statsBody = document.getElementById("statsBody");
+    const btnStats = document.getElementById("btnStats");
+    const btnCloseStats = document.getElementById("btnCloseStats");
+
+    function renderStats() {
+      const stats = loadStats();
+      let totalAttempts = 0;
+      let totalCorrect = 0;
+      let totalWrong = 0;
+
+      VOCABULARY.forEach(v => {
+        const s = stats[v.id];
+        if (s) {
+          totalAttempts += s.attempts;
+          totalCorrect += s.correct;
+          totalWrong += s.wrong;
+        }
+      });
+
+      let html = `
+        <div class="stats-summary">
+          <div class="stat-box">
+            <div class="number">${totalAttempts}</div>
+            <div class="label">Total</div>
+          </div>
+          <div class="stat-box correct">
+            <div class="number">${totalCorrect}</div>
+            <div class="label">Correct</div>
+          </div>
+          <div class="stat-box wrong">
+            <div class="number">${totalWrong}</div>
+            <div class="label">Wrong</div>
+          </div>
+        </div>
+        <div class="vocab-stats-list">
+      `;
+
+      VOCABULARY.forEach(v => {
+        const s = stats[v.id];
+        const attempts = s ? s.attempts : 0;
+        const correct = s ? s.correct : 0;
+        const wrong = s ? s.wrong : 0;
+        html += `
+          <div class="vocab-stat-item">
+            <div>
+              <div class="word">${v.prompt}</div>
+              <div class="translation">${v.answer}</div>
+            </div>
+            <div class="ratio">
+              <span class="correct-count">${correct}</span> /
+              <span class="wrong-count">${wrong}</span>
+              <span style="color:var(--text-muted); font-weight:400;">(${attempts})</span>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div>
+        <button class="btn-clear-stats" id="btnClearStats">Reset All Statistics</button>
+      `;
+      statsBody.innerHTML = html;
+
+      document.getElementById("btnClearStats").addEventListener("click", () => {
+        if (confirm("Are you sure you want to reset all statistics?")) {
+          clearStats();
+          renderStats();
+        }
+      });
+    }
+
+    btnStats.addEventListener("click", () => {
+      renderStats();
+      statsModal.classList.add("open");
+    });
+
+    btnCloseStats.addEventListener("click", () => {
+      statsModal.classList.remove("open");
+    });
+
+    statsModal.addEventListener("click", (e) => {
+      if (e.target === statsModal) {
+        statsModal.classList.remove("open");
+      }
+    });
+
+    // =========================================================================
+    // INIT
+    // =========================================================================
+    async function init() {
+      resizeCanvas();
+      await initOCR();
+      nextWord();
+    }
+
+    init();
+  </script>
+</body>
+</html>
