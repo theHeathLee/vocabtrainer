@@ -614,6 +614,67 @@
       background: #fef3c7;
     }
 
+    /* ---- Batch word list toggle ---- */
+    .batch-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: var(--bg);
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 8px;
+      transition: background 0.15s;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .batch-toggle:hover {
+      background: var(--border);
+    }
+
+    .batch-toggle .toggle-icon {
+      transition: transform 0.2s;
+      color: var(--text-muted);
+    }
+
+    .batch-toggle.open .toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .batch-word-list {
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .batch-word-list.open {
+      display: flex;
+    }
+
+    .batch-word-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 12px;
+      background: var(--bg);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    .batch-word-item .bw-prompt {
+      font-weight: 600;
+    }
+
+    .batch-word-item .bw-answer {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
     /* ---- Loading overlay ---- */
     .loading-overlay {
       position: fixed;
@@ -1537,9 +1598,29 @@
             <input type="number" id="batchSizeInput" min="1" max="${VOCABULARY.length}" value="${batchSize}">
           </div>
           <button class="btn-skip-batch" id="btnSkipBatch">Skip Batch (get new words)</button>
+          <div class="batch-toggle" id="batchToggle">
+            <span>View Current Batch (${currentBatch.length} words)</span>
+            <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="batch-word-list" id="batchWordList">
+      `;
+
+      currentBatch.forEach(v => {
+        html += `
+            <div class="batch-word-item">
+              <div>
+                <span class="bw-prompt">${v.prompt}</span>
+                <span class="bw-answer"> — ${v.answerDisplay}</span>
+              </div>
+            </div>
+        `;
+      });
+
+      html += `
+          </div>
         </div>
 
-        <h3 style="font-size:14px; font-weight:700; margin-bottom:10px;">Current Batch (${currentBatch.length} words)</h3>
+        <h3 style="font-size:14px; font-weight:700; margin-bottom:10px;">Batch Statistics</h3>
         <div class="stats-summary" style="grid-template-columns: 1fr 1fr 1fr 1fr 1fr;">
           <div class="stat-box">
             <div class="number">${totalAttempts}</div>
@@ -1604,6 +1685,14 @@
       document.getElementById("btnSkipBatch").addEventListener("click", () => {
         skipCurrentBatch();
         statsModal.classList.remove("open");
+      });
+
+      // Batch word list toggle
+      document.getElementById("batchToggle").addEventListener("click", () => {
+        const toggle = document.getElementById("batchToggle");
+        const list = document.getElementById("batchWordList");
+        toggle.classList.toggle("open");
+        list.classList.toggle("open");
       });
 
       document.getElementById("btnClearStats").addEventListener("click", () => {
