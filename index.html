@@ -1632,12 +1632,12 @@
     }
 
     // ---- Migration from old vocab file to new lesson files ----
-    const OLD_VOCAB_SLUG = 'pol__lesson_1_2';
+    const OLD_VOCAB_SLUG = 'pol_lesson_1_2';
     const MIGRATION_DISMISSED_KEY = 'anki_scribe_migration_dismissed';
 
     function isOldUserNeedingMigration() {
       // Already dismissed the dialog
-      if (localStorage.getItem(MIGRATION_DISMISSED_KEY)) return false;
+      //if (localStorage.getItem(MIGRATION_DISMISSED_KEY)) return false;
       // Check if old file slug exists in registry
       const files = getFileRegistry();
       return files.some(f => f.slug === OLD_VOCAB_SLUG);
