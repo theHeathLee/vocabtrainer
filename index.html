@@ -2011,6 +2011,27 @@
     </div>
   </div>
 
+  <!-- File Complete: switch to next file dialog -->
+  <div class="modal-overlay" id="fileCompleteOverlay">
+    <div class="modal" style="border-radius:20px; max-width:400px;">
+      <div class="modal-header">
+        <h2 id="fileCompleteTitle">Lesson Complete!</h2>
+        <button class="modal-close" id="fileCompleteClose" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="text-align:center; padding:20px 24px 28px;">
+        <p id="fileCompleteMsg" style="margin:0 0 20px; color:var(--text-secondary); font-size:14px; line-height:1.5;">
+          You mastered all words in this file. Would you like to switch to the next one?
+        </p>
+        <div id="fileCompleteActions" style="display:flex; gap:10px; justify-content:center;">
+          <button id="fileCompleteStay" type="button" class="btn" style="background:var(--surface-alt); color:var(--text); padding:10px 20px; border-radius:12px; font-size:14px; font-weight:600; border:1px solid var(--border); cursor:pointer;">Stay Here</button>
+          <button id="fileCompleteSwitch" type="button" class="btn" style="background:var(--primary); color:#fff; padding:10px 20px; border-radius:12px; font-size:14px; font-weight:600; border:none; cursor:pointer;">Next File</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // =========================================================================
     // VOCABULARY DATA - loaded from external file or IndexedDB
@@ -2474,20 +2495,44 @@
         name: 'Batch Royalty',
         desc: 'Complete 25 batches.',
         check: (ctx) => ctx.batchCompletions >= 25
+      },
+      file_complete_1: {
+        id: 'file_complete_1',
+        icon: '\u{1F4D6}', // open book
+        name: 'Lesson Complete!',
+        desc: 'Master every word in a vocabulary file.',
+        check: (ctx) => ctx.fileCompletions >= 1
+      },
+      file_complete_3: {
+        id: 'file_complete_3',
+        icon: '\u{1F4DA}', // books
+        name: 'Bookworm',
+        desc: 'Complete 3 vocabulary files.',
+        check: (ctx) => ctx.fileCompletions >= 3
+      },
+      file_complete_5: {
+        id: 'file_complete_5',
+        icon: '\u{1F393}', // graduation cap
+        name: 'Scholar',
+        desc: 'Complete 5 vocabulary files.',
+        check: (ctx) => ctx.fileCompletions >= 5
       }
     };
 
     function loadAchievements() {
+      const defaults = { unlocked: {}, batchCompletions: 0, fileCompletions: 0, completedFiles: [] };
       try {
         const raw = localStorage.getItem(ACHIEVEMENTS_KEY);
-        if (!raw) return { unlocked: {}, batchCompletions: 0 };
+        if (!raw) return defaults;
         const data = JSON.parse(raw);
-        if (!data || typeof data !== 'object') return { unlocked: {}, batchCompletions: 0 };
+        if (!data || typeof data !== 'object') return defaults;
         if (!data.unlocked || typeof data.unlocked !== 'object') data.unlocked = {};
         if (typeof data.batchCompletions !== 'number') data.batchCompletions = 0;
+        if (typeof data.fileCompletions !== 'number') data.fileCompletions = 0;
+        if (!Array.isArray(data.completedFiles)) data.completedFiles = [];
         return data;
       } catch {
-        return { unlocked: {}, batchCompletions: 0 };
+        return defaults;
       }
     }
 
@@ -2500,6 +2545,38 @@
     function recordBatchCompletion() {
       const data = loadAchievements();
       data.batchCompletions = (data.batchCompletions || 0) + 1;
+      const newlyUnlocked = [];
+      for (const [id, def] of Object.entries(ACHIEVEMENT_DEFS)) {
+        if (!data.unlocked[id] && def.check(data)) {
+          data.unlocked[id] = { unlockedAt: Date.now() };
+          newlyUnlocked.push(id);
+        }
+      }
+      saveAchievements(data);
+      return newlyUnlocked;
+    }
+
+    // Check if every word in the current VOCABULARY file is mastered
+    function isFileFullyMastered() {
+      if (VOCABULARY.length === 0) return false;
+      const stats = loadStats();
+      for (const v of VOCABULARY) {
+        const s = stats[v.id];
+        if (!s || !s.history || s.history.length === 0) return false;
+        const lastRating = s.history[s.history.length - 1].rating;
+        if (lastRating !== 'good' && lastRating !== 'easy') return false;
+      }
+      return true;
+    }
+
+    // Record a file completion and check for new achievements.
+    // Returns array of newly unlocked achievement ids.
+    function recordFileCompletion(slug) {
+      const data = loadAchievements();
+      if (!data.completedFiles.includes(slug)) {
+        data.completedFiles.push(slug);
+        data.fileCompletions = data.completedFiles.length;
+      }
       const newlyUnlocked = [];
       for (const [id, def] of Object.entries(ACHIEVEMENT_DEFS)) {
         if (!data.unlocked[id] && def.check(data)) {
@@ -2621,15 +2698,81 @@
     });
 
     // Show a queue of achievements one after another
-    function showAchievementQueue(ids) {
-      if (!ids || ids.length === 0) return;
+    function showAchievementQueue(ids, onAllDone) {
+      if (!ids || ids.length === 0) {
+        if (onAllDone) onAllDone();
+        return;
+      }
       const [first, ...rest] = ids;
       showAchievementPopup(first, () => {
         if (rest.length > 0) {
-          setTimeout(() => showAchievementQueue(rest), 300);
+          setTimeout(() => showAchievementQueue(rest, onAllDone), 300);
+        } else if (onAllDone) {
+          onAllDone();
         }
       });
     }
+
+    // ---- File Complete dialog ----
+    const fileCompleteOverlay = document.getElementById('fileCompleteOverlay');
+    const fileCompleteClose = document.getElementById('fileCompleteClose');
+    const fileCompleteStay = document.getElementById('fileCompleteStay');
+    const fileCompleteSwitch = document.getElementById('fileCompleteSwitch');
+    const fileCompleteMsg = document.getElementById('fileCompleteMsg');
+    const fileCompleteTitle = document.getElementById('fileCompleteTitle');
+    let _nextFileSwitchSlug = null;
+
+    function getNextFileSlug() {
+      const files = getFileRegistry();
+      if (files.length <= 1) return null;
+      const idx = files.findIndex(f => f.slug === activeFileSlug);
+      if (idx === -1) return files[0].slug;
+      // Pick the next file in the list, wrapping around
+      const nextIdx = (idx + 1) % files.length;
+      return files[nextIdx].slug;
+    }
+
+    function showFileCompleteDialog() {
+      const nextSlug = getNextFileSlug();
+      const files = getFileRegistry();
+      const currentFile = files.find(f => f.slug === activeFileSlug);
+      const currentName = currentFile ? currentFile.name : activeFileSlug;
+
+      if (!nextSlug) {
+        // Only one file — no option to switch
+        fileCompleteTitle.textContent = 'Lesson Complete!';
+        fileCompleteMsg.textContent = `You mastered all words in "${currentName}". Great job!`;
+        fileCompleteSwitch.style.display = 'none';
+        fileCompleteStay.textContent = 'OK';
+      } else {
+        const nextFile = files.find(f => f.slug === nextSlug);
+        const nextName = nextFile ? nextFile.name : nextSlug;
+        fileCompleteTitle.textContent = 'Lesson Complete!';
+        fileCompleteMsg.textContent = `You mastered all words in "${currentName}". Switch to "${nextName}"?`;
+        fileCompleteSwitch.style.display = '';
+        fileCompleteStay.textContent = 'Stay Here';
+        _nextFileSwitchSlug = nextSlug;
+      }
+      fileCompleteOverlay.classList.add('open');
+    }
+
+    function closeFileCompleteDialog() {
+      fileCompleteOverlay.classList.remove('open');
+      _nextFileSwitchSlug = null;
+    }
+
+    fileCompleteClose.addEventListener('click', closeFileCompleteDialog);
+    fileCompleteStay.addEventListener('click', closeFileCompleteDialog);
+    fileCompleteSwitch.addEventListener('click', async () => {
+      const slug = _nextFileSwitchSlug;
+      if (slug) {
+        closeFileCompleteDialog();
+        await switchVocabFile(slug);
+      }
+    });
+    fileCompleteOverlay.addEventListener('click', (e) => {
+      if (e.target === fileCompleteOverlay) closeFileCompleteDialog();
+    });
 
     // =========================================================================
     // BATCH SYSTEM
@@ -3427,16 +3570,36 @@
       // Check if all words in the current batch are now mastered
       if (isBatchFullyMastered()) {
         const newlyUnlocked = recordBatchCompletion();
-        // Auto-advance to a new batch
+
+        // Check if the ENTIRE file is now mastered
+        const fileMastered = isFileFullyMastered();
+        let fileAchievements = [];
+        if (fileMastered) {
+          fileAchievements = recordFileCompletion(activeFileSlug);
+        }
+
+        // Auto-advance to a new batch (even if file is done, keeps UI consistent)
         generateNewBatch();
         resolveBatch();
         updateBatchIndicator();
         updateProgressRing();
         const vocab = pickNextVocab();
         showVocab(vocab);
+
+        // Merge all newly unlocked achievements (batch + file)
+        const allUnlocked = [...newlyUnlocked, ...fileAchievements];
+
+        // After all achievements are dismissed, show file-complete dialog if applicable
+        const afterAchievements = fileMastered ? () => {
+          setTimeout(() => showFileCompleteDialog(), 300);
+        } : null;
+
         // Show achievement animation (after UI updates)
-        if (newlyUnlocked.length > 0) {
-          setTimeout(() => showAchievementQueue(newlyUnlocked), 400);
+        if (allUnlocked.length > 0) {
+          setTimeout(() => showAchievementQueue(allUnlocked, afterAchievements), 400);
+        } else if (fileMastered) {
+          // File done but no new achievement to show — just show the dialog
+          setTimeout(() => showFileCompleteDialog(), 400);
         } else {
           // Still show a brief celebration even without a new achievement
           setTimeout(() => {
